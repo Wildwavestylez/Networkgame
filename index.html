@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Mobilní síť</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([50.075, 14.43], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+            maxZoom: 18,
+        }).addTo(map);
+
+        var playerTransmitters = [];
+        var competitorTransmitters = [];
+        var playerTotalEarnings = 200;
+        var competitorTotalEarnings = 0;
+        var playerBaseEarningsPerSecond = 1;
+        var competitorEarningsPerSecond = 0.5;
+        var currentTransmitterPrice = 200;
+        var transmitterPriceIncrement = 10;
+        var placingTransmitter = false;
+        var selectedTransmitter = null;
+        var transmitterRadius = 3500;
+
+        var customersPerCategory = [0.6, 0.3, 0.1, 0.08, 0.05, 0.01];
+        var customerEarningsMultiplier = 0.00001; // Zisk za každého zákazníka
+
+        function createTransmitter(e) {
+            if (playerTotalEarnings < currentTransmitterPrice) {
+                alert("Nemáte dostatek peněz na vytvoření vysílače!");
+                return;
+            }
+
+            var areaType = prompt("Vyberte kategorii urbanizace pro tento vysílač:\n1) Městská oblast centrum\n2) Městská oblast sídliště a předměstí\n3) Městská oblast s průmyslovou zástavbou\n4) Městys\n5) Vesnice\n6) Pole, louky, lesy, rybníky");
+
+            if (!areaType || isNaN(areaType) || areaType < 1 || areaType > 6) {
+                alert("Neplatná volba kategorie, zvolte prosím číslo od 1 do 6.");
+                return;
+            }
+
+            playerTotalEarnings -= currentTransmitterPrice;
+            playerBaseEarningsPerSecond += customersPerCategory[areaType - 1] * 0.01;
+
+            var marker = L.marker(e.latlng, { draggable: true }).addTo(map);
+            var circle = L.circle(e.latlng, { radius: transmitterRadius, color: 'blue' }).addTo(map);
+
+            marker.bindPopup("Vysílač č. " + (playerTransmitters.length + 1) + "<br>Generuje " + calculatePlayerEarningsPerSecond().toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
+
+            marker.on('dragend', function (e) {
+            circle.setLatLng(e.target.getLatLng());
+                var markerIndex = playerTransmitters.indexOf(marker);
+                
+                if (markerIndex !== -1) {
+                    playerTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
+                    circle.setLatLng(e.target.getLatLng());
+                }
+            });
+
+            playerTransmitters.push({ marker: marker, customers: 0, areaType: areaType });
+
+            updatePlayerTotalEarnings();
+            updateTransmitterPrice();
+
+            placingTransmitter = false;
+            document.getElementById("map").style.cursor = "default";
+
+            // Konkurenční operátor staví vlastní vysílače
+            buildCompetitorTransmitter();
+        }
+
+        function buildCompetitorTransmitter() {
+            if (competitorTotalEarnings < currentTransmitterPrice) {
+                return;
+            }
+
+            var areaType = Math.floor(Math.random() * 6) + 1;
+
+            competitorTotalEarnings -= currentTransmitterPrice;
+            competitorEarningsPerSecond += customersPerCategory[areaType - 1] * 0.01;
+
+            var lat, lng;
+            var validPosition = false;
+            var attempts = 0;
+            var maxAttempts = 100;
+
+            var playerLat = playerTransmitters[0].marker.getLatLng().lat;
+            var playerLng = playerTransmitters[0].marker.getLatLng().lng;
+
+            while (!validPosition && attempts < maxAttempts) {
+                lat = playerLat + (Math.random() - 0.7) * 0.7;
+                lng = playerLng + (Math.random() - 0.7) * 0.7;
+
+                validPosition = checkValidPosition(lat, lng);
+                attempts++;
+            }
+
+            if (!validPosition) {
+                console.log("Nepodařilo se najít vhodnou pozici pro konkurenční vysílač.");
+                return;
+            }
+
+            var marker = L.marker([lat, lng], { draggable: true, icon: L.icon({ iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], tooltipAnchor: [16, -28], shadowSize: [41, 41] }) }).addTo(map);
+            var circle = L.circle([lat, lng], { radius: transmitterRadius, color: 'red' }).addTo(map);
+
+            marker.bindPopup("Konkurenční vysílač č. " + (competitorTransmitters.length + 1) + "<br>Generuje " + competitorEarningsPerSecond.toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
+
+            marker.on('dragend', function (e) {
+                var markerIndex = competitorTransmitters.indexOf(marker);
+                if (markerIndex !== -1) {
+                    competitorTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
+                    circle.setLatLng(e.target.getLatLng());
+                }
+            });
+
+            competitorTransmitters.push({ marker: marker, customers: 0, areaType: areaType });
+
+            // Zvýšení ceny pro další vysílač
+            currentTransmitterPrice += transmitterPriceIncrement;
+
+            updateCompetitorTotalEarnings();
+            updateTransmitterPrice();
+        }
+
+        function selectTransmitter(marker) {
+            if (selectedTransmitter) {
+                selectedTransmitter.marker.setIcon(L.Icon.Default);
+            }
+            selectedTransmitter = marker;
+            selectedTransmitter.marker.setIcon(L.icon({
+                iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/images/marker-icon.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                tooltipAnchor: [16, -28],
+                shadowSize: [41, 41]
+            }));
+        }
+
+        function checkValidPosition(lat, lng) {
+            for (var i = 0; i < playerTransmitters.length; i++) {
+                var distance = map.distance([lat, lng], playerTransmitters[i].marker.getLatLng());
+                if (distance <= (transmitterRadius * 2)) {
+                    return false;
+                }
+            }
+
+            for (var i = 0; i < competitorTransmitters.length; i++) {
+                var distance = map.distance([lat, lng], competitorTransmitters[i].marker.getLatLng());
+                if (distance <= (transmitterRadius * 2)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        function calculatePlayerEarningsPerSecond() {
+            var totalCustomers = playerTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0);
+            return playerBaseEarningsPerSecond + (totalCustomers * customerEarningsMultiplier);
+        }
+
+        function updatePlayerTotalEarnings() {
+            document.getElementById("player-total-earnings").textContent = "Vaše celkové výdělky: " + playerTotalEarnings.toFixed(2) + " Kč";
+        }
+
+        function updateCompetitorTotalEarnings() {
+            document.getElementById("competitor-total-earnings").textContent = "Výdělky konkurence: " + competitorTotalEarnings.toFixed(2) + " Kč";
+        }
+
+        function updateTransmitterPrice() {
+            document.getElementById("transmitter-price").textContent = "Cena vysílače: " + currentTransmitterPrice.toFixed(2) + " Kč";
+        }
+
+        function updateEarningsPerSecond() {
+            document.getElementById("player-earnings-per-second").textContent = "Výdělky za sekundu (Hráč): " + calculatePlayerEarningsPerSecond().toFixed(2) + " Kč/s";
+            document.getElementById("competitor-earnings-per-second").textContent = "Výdělky za sekundu (Konkurence): " + competitorEarningsPerSecond.toFixed(2) + " Kč/s";
+        }
+
+        function updateCustomers() {
+            var totalCustomers = 0;
+            for (var i = 0; i < playerTransmitters.length; i++) {
+                playerTransmitters[i].customers += customersPerCategory[playerTransmitters[i].areaType - 1];
+                totalCustomers += playerTransmitters[i].customers;
+                playerTransmitters[i].marker.setPopupContent("Vysílač č. " + (i + 1) + "<br>Generuje " + calculatePlayerEarningsPerSecond().toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + playerTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + playerTransmitters[i].customers.toFixed(0));
+            }
+
+            for (var i = 0; i < competitorTransmitters.length; i++) {
+                competitorTransmitters[i].customers += customersPerCategory[competitorTransmitters[i].areaType - 1];
+                totalCustomers += competitorTransmitters[i].customers;
+                competitorTransmitters[i].marker.setPopupContent("Konkurenční vysílač č. " + (i + 1) + "<br>Generuje " + competitorEarningsPerSecond.toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + competitorTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + competitorTransmitters[i].customers.toFixed(0));
+            }
+
+            document.getElementById("total-customers").textContent = "Celkový počet zákazníků: " + totalCustomers.toFixed(0);
+        }
+
+        function startGame() {
+            setInterval(function () {
+                updateCustomers();
+            }, 1000);
+
+            setInterval(function () {
+                playerTotalEarnings += calculatePlayerEarningsPerSecond();
+                competitorTotalEarnings += competitorEarningsPerSecond + (competitorTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) / 1000);
+                updatePlayerTotalEarnings();
+                updateCompetitorTotalEarnings();
+            }, 1000);
+
+            map.on('click', function (e) {
+                if (!placingTransmitter) {
+                    createTransmitter(e);
+                }
+            });
+
+            // Konkurenční operátor staví vlastní vysílače každých 5 sekund
+            setInterval(function () {
+                buildCompetitorTransmitter();
+            }, 5000);
+        }
+
+        // Spustíme hru při načtení stránky
+        window.onload = startGame;
+    </script>
+
+    <h2>Aktuální stav:</h2>
+    <p id="player-total-earnings"></p>
+    <p id="competitor-total-earnings"></p>
+    <p id="player-earnings-per-second"></p>
+    <p id="competitor-earnings-per-second"></p>
+    <p id="transmitter-price"></p>
+    <p id="total-customers"></p>
+
+    <script>
+        // Počáteční výdělky
+        updatePlayerTotalEarnings();
+        updateCompetitorTotalEarnings();
+        updateTransmitterPrice();
+        updateEarningsPerSecond();
+        updateCustomers();
+    </script>
+</body>
+</html>
