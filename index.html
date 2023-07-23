@@ -59,13 +59,16 @@
 
             marker.bindPopup("Vysílač č. " + (playerTransmitters.length + 1) + "<br>Generuje " + calculatePlayerEarningsPerSecond().toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
 
-            marker.on('dragend', function (e) {
-                var markerIndex = playerTransmitters.indexOf(marker);
-                if (markerIndex !== -1) {
-                    playerTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
-                    circle.setLatLng(e.target.getLatLng());
-                }
-            });
+                    marker.on('dragend', function (e) {
+            // Při přetáhnutí markeru na novou pozici aktualizujeme polohu okruhu
+            circle.setLatLng(e.target.getLatLng());
+
+            var markerIndex = playerTransmitters.indexOf(marker);
+            if (markerIndex !== -1) {
+                playerTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
+            }
+        });
+
 
             playerTransmitters.push({ marker: marker, customers: 0, areaType: areaType });
 
