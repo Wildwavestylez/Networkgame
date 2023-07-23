@@ -33,10 +33,10 @@
         var transmitterPriceIncrement = 10;
         var placingTransmitter = false;
         var selectedTransmitter = null;
-        var transmitterRadius = 3500;
+        var transmitterRadius = 2800;
 
         var customersPerCategory = [0.6, 0.3, 0.1, 0.08, 0.05, 0.01];
-        var customerEarningsMultiplier = 0.00001; // Zisk za každého zákazníka
+        var customerEarningsMultiplier = 0.00002; // Zisk za každého zákazníka
 
         function createTransmitter(e) {
             if (playerTotalEarnings < currentTransmitterPrice) {
@@ -89,7 +89,7 @@
             var areaType = Math.floor(Math.random() * 6) + 1;
 
             competitorTotalEarnings -= currentTransmitterPrice;
-            competitorEarningsPerSecond += customersPerCategory[areaType - 1] * 0.01;
+            competitorEarningsPerSecond += customersPerCategory[areaType - 1] * 0.00001;
 
             var lat, lng;
             var validPosition = false;
