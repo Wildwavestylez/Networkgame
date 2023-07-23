@@ -25,7 +25,7 @@
 
         var playerTransmitters = [];
         var competitorTransmitters = [];
-        var playerTotalEarnings = 200;
+        var playerTotalEarnings = 5000;
         var competitorTotalEarnings = 0;
         var playerBaseEarningsPerSecond = 1;
         var competitorBaseEarningsPerSecond = 0.2;
@@ -90,7 +90,7 @@
             var areaType = Math.floor(Math.random() * 6) + 1;
 
             competitorTotalEarnings -= currentTransmitterPrice;
-            competitorBaseEarningsPerSecond += customersPerCategory[areaType - 6] * 0.0001;
+            competitorBaseEarningsPerSecond += customersPerCategory[areaType - 1] * 0.0000001;
 
             var lat, lng;
             var validPosition = false;
