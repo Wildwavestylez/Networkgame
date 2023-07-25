@@ -25,18 +25,20 @@
 
         var playerTransmitters = [];
         var competitorTransmitters = [];
-        var playerTotalEarnings = 2000;
+        var playerTotalEarnings = 3000;
         var competitorTotalEarnings = 0;
+        var playerEarningsPerSecond = 1;
+        var competitorEarningsPerSecond = 0.5;
         var playerBaseEarningsPerSecond = 1;
         var competitorBaseEarningsPerSecond = 0.5;
+        var customerEarningsMultiplier = 0.00001; // Zisk za každých 1000 zákazníků
         var currentTransmitterPrice = 200;
         var transmitterPriceIncrement = 10;
         var placingTransmitter = false;
         var selectedTransmitter = null;
-        var transmitterRadius = 2600;
+        var transmitterRadius = 2500;
 
-        var customersPerCategory = [0.6, 0.3, 0.1, 0.08, 0.05, 0.01];
-        var customerEarningsMultiplier = 0.00001; // Zisk za každého zákazníka
+        var customersPerCategory = [0.7, 0.4, 0.1, 0.08, 0.05, 0.01];
 
         function createTransmitter(e) {
             if (playerTotalEarnings < currentTransmitterPrice) {
@@ -52,23 +54,20 @@
             }
 
             playerTotalEarnings -= currentTransmitterPrice;
-            playerBaseEarningsPerSecond += customersPerCategory[areaType - 1] * 0.01;
+            playerEarningsPerSecond = playerBaseEarningsPerSecond + (playerTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
 
             var marker = L.marker(e.latlng, { draggable: true }).addTo(map);
             var circle = L.circle(e.latlng, { radius: transmitterRadius, color: 'blue' }).addTo(map);
 
-            marker.bindPopup("Vysílač č. " + (playerTransmitters.length + 1) + "<br>Generuje " + calculatePlayerEarningsPerSecond().toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
+            marker.bindPopup("Vysílač č. " + (playerTransmitters.length + 1) + "<br>Generuje " + playerEarningsPerSecond.toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
 
-                    marker.on('dragend', function (e) {
-            // Při přetáhnutí markeru na novou pozici aktualizujeme polohu okruhu
-            circle.setLatLng(e.target.getLatLng());
-
-            var markerIndex = playerTransmitters.indexOf(marker);
-            if (markerIndex !== -1) {
-                playerTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
-            }
-        });
-
+            marker.on('dragend', function (e) {
+                var markerIndex = playerTransmitters.indexOf(marker);
+                if (markerIndex !== -1) {
+                    playerTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
+                    circle.setLatLng(e.target.getLatLng());
+                }
+            });
 
             playerTransmitters.push({ marker: marker, customers: 0, areaType: areaType });
 
@@ -90,19 +89,20 @@
             var areaType = Math.floor(Math.random() * 6) + 1;
 
             competitorTotalEarnings -= currentTransmitterPrice;
-            competitorBaseEarningsPerSecond += customersPerCategory[areaType - 1] * 0.0000001;
+            competitorEarningsPerSecond = competitorBaseEarningsPerSecond + (competitorTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
 
             var lat, lng;
             var validPosition = false;
             var attempts = 0;
             var maxAttempts = 100;
 
-            var playerLat = playerTransmitters[0].marker.getLatLng().lat;
-            var playerLng = playerTransmitters[0].marker.getLatLng().lng;
-
             while (!validPosition && attempts < maxAttempts) {
-                lat = playerLat + (Math.random() - 0.5) * 0.4;
-                lng = playerLng + (Math.random() - 0.5) * 0.4;
+                var randomTransmitter = playerTransmitters[Math.floor(Math.random() * playerTransmitters.length)];
+                var playerLat = randomTransmitter.marker.getLatLng().lat;
+                var playerLng = randomTransmitter.marker.getLatLng().lng;
+
+                lat = playerLat + (Math.random() - 0.4) * 0.4;
+                lng = playerLng + (Math.random() - 0.4) * 0.4;
 
                 validPosition = checkValidPosition(lat, lng);
                 attempts++;
@@ -116,7 +116,7 @@
             var marker = L.marker([lat, lng], { draggable: true, icon: L.icon({ iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], tooltipAnchor: [16, -28], shadowSize: [41, 41] }) }).addTo(map);
             var circle = L.circle([lat, lng], { radius: transmitterRadius, color: 'red' }).addTo(map);
 
-            marker.bindPopup("Konkurenční vysílač č. " + (competitorTransmitters.length + 1) + "<br>Generuje " + calculateCompetitorEarningsPerSecond().toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
+            marker.bindPopup("Konkurenční vysílač č. " + (competitorTransmitters.length + 1) + "<br>Generuje " + competitorEarningsPerSecond.toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
 
             marker.on('dragend', function (e) {
                 var markerIndex = competitorTransmitters.indexOf(marker);
@@ -168,22 +168,12 @@
             return true;
         }
 
-        function calculatePlayerEarningsPerSecond() {
-            var totalCustomers = playerTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0);
-            return playerBaseEarningsPerSecond + (totalCustomers * customerEarningsMultiplier);
-        }
-
-        function calculateCompetitorEarningsPerSecond() {
-            var totalCustomers = competitorTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0);
-            return competitorBaseEarningsPerSecond + (totalCustomers * customerEarningsMultiplier);
-        }
-
         function updatePlayerTotalEarnings() {
-            document.getElementById("player-total-earnings").textContent = "Váš celkový výdělek: " + playerTotalEarnings.toFixed(2) + " Kč";
+            document.getElementById("player-total-earnings").textContent = "Vaše celkové výdělky: " + playerTotalEarnings.toFixed(2) + " Kč";
         }
 
         function updateCompetitorTotalEarnings() {
-            document.getElementById("competitor-total-earnings").textContent = "Výdělek konkurence: " + competitorTotalEarnings.toFixed(2) + " Kč";
+            document.getElementById("competitor-total-earnings").textContent = "Výdělky konkurence: " + competitorTotalEarnings.toFixed(2) + " Kč";
         }
 
         function updateTransmitterPrice() {
@@ -191,8 +181,8 @@
         }
 
         function updateEarningsPerSecond() {
-            document.getElementById("player-earnings-per-second").textContent = "Výdělek za sekundu (Hráč): " + calculatePlayerEarningsPerSecond().toFixed(2) + " Kč/s";
-            document.getElementById("competitor-earnings-per-second").textContent = "Výdělek za sekundu (Konkurence): " + calculateCompetitorEarningsPerSecond().toFixed(2) + " Kč/s";
+            document.getElementById("player-earnings-per-second").textContent = "Výdělky za sekundu (Hráč): " + playerEarningsPerSecond.toFixed(2) + " Kč/s";
+            document.getElementById("competitor-earnings-per-second").textContent = "Výdělky za sekundu (Konkurence): " + competitorEarningsPerSecond.toFixed(2) + " Kč/s";
         }
 
         function updateCustomers() {
@@ -200,13 +190,13 @@
             for (var i = 0; i < playerTransmitters.length; i++) {
                 playerTransmitters[i].customers += customersPerCategory[playerTransmitters[i].areaType - 1];
                 totalCustomers += playerTransmitters[i].customers;
-                playerTransmitters[i].marker.setPopupContent("Vysílač č. " + (i + 1) + "<br>Generuje " + calculatePlayerEarningsPerSecond().toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + playerTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + playerTransmitters[i].customers.toFixed(0));
+                playerTransmitters[i].marker.setPopupContent("Vysílač č. " + (i + 1) + "<br>Generuje " + (playerBaseEarningsPerSecond + playerTransmitters[i].customers * customerEarningsMultiplier).toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + playerTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + playerTransmitters[i].customers.toFixed(0));
             }
 
             for (var i = 0; i < competitorTransmitters.length; i++) {
                 competitorTransmitters[i].customers += customersPerCategory[competitorTransmitters[i].areaType - 1];
                 totalCustomers += competitorTransmitters[i].customers;
-                competitorTransmitters[i].marker.setPopupContent("Konkurenční vysílač č. " + (i + 1) + "<br>Generuje " + calculateCompetitorEarningsPerSecond().toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + competitorTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + competitorTransmitters[i].customers.toFixed(0));
+                competitorTransmitters[i].marker.setPopupContent("Konkurenční vysílač č. " + (i + 1) + "<br>Generuje " + (competitorBaseEarningsPerSecond + competitorTransmitters[i].customers * customerEarningsMultiplier).toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + competitorTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + competitorTransmitters[i].customers.toFixed(0));
             }
 
             document.getElementById("total-customers").textContent = "Celkový počet zákazníků: " + totalCustomers.toFixed(0);
@@ -218,8 +208,8 @@
             }, 1000);
 
             setInterval(function () {
-                playerTotalEarnings += calculatePlayerEarningsPerSecond();
-                competitorTotalEarnings += calculateCompetitorEarningsPerSecond();
+                playerTotalEarnings += playerEarningsPerSecond + (playerTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
+                competitorTotalEarnings += competitorEarningsPerSecond + (competitorTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
                 updatePlayerTotalEarnings();
                 updateCompetitorTotalEarnings();
             }, 1000);
