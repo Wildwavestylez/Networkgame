@@ -132,6 +132,16 @@ function addShop(latlng){
   customers += 500; updateHUD();
 }
 
+// --- debounce helper ---
+function debounce(func, wait = 100) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  }
+}
+
+// --- upravený computeCoverage ---
 function computeCoverage() {
   coverageLayer.clearLayers();
 
@@ -144,17 +154,29 @@ function computeCoverage() {
   });
   if (txs.length === 0) return;
 
-  // Zvýšený krok, méně čtverců → bezpečné i na mobilu
+  // Dynamický krok podle zoomu
   let step;
   const zoom = map.getZoom();
-  if (zoom < 10) step = 0.004;      // ~400 m
-  else if (zoom < 12) step = 0.002; // ~200 m
-  else step = 0.001;                // ~100 m
+  if (zoom < 10) step = 0.004;      
+  else if (zoom < 12) step = 0.002; 
+  else step = 0.001;                
 
-  const lats = txs.map(t => t.latlng.lat), lngs = txs.map(t => t.latlng.lng);
-  const south = Math.min(...lats) - 0.04, north = Math.max(...lats) + 0.04;
-  const west = Math.min(...lngs) - 0.04, east = Math.max(...lngs) + 0.04;
+  // Pouze aktuální viewport
+  const bounds = map.getBounds();
+  let south = bounds.getSouth();
+  let north = bounds.getNorth();
+  let west = bounds.getWest();
+  let east = bounds.getEast();
 
+  // Omezit počet čtverců (max 2000)
+  const maxSquares = 2000;
+  const numSquares = Math.ceil((north - south) / step) * Math.ceil((east - west) / step);
+  if (numSquares > maxSquares) {
+    const scale = Math.sqrt(numSquares / maxSquares);
+    step *= scale;
+  }
+
+  // Barvy signálu
   const baseColors = ['#00ff00', '#ffff00', '#ffa500', '#ff0000'];
   const colorBands = [];
   for (let i = 0; i < baseColors.length - 1; i++) {
@@ -196,7 +218,6 @@ function computeCoverage() {
       const color = colorBands[idx];
       const opacity = 0.4;
 
-      // Bez canvasu – běžné L.rectangle
       const rect = L.rectangle(
         [
           [lat, lng],
@@ -208,7 +229,14 @@ function computeCoverage() {
       coverageLayer.addLayer(rect);
     }
   }
-}  
+}
+
+// --- automatické překreslování při pohybu mapy nebo zoomu ---
+const computeCoverageDebounced = debounce(computeCoverage, 150);
+
+map.on('moveend', computeCoverageDebounced);
+map.on('zoomend', computeCoverageDebounced);  
+  
 function hexToRgb(hex){
   let num = parseInt(hex.replace('#',''),16);
   return {r:(num>>16)&255, g:(num>>8)&255, b:num&255};
