@@ -1,252 +1,251 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+
+<html lang="cs">
 <head>
-    <meta charset="utf-8" />
-    <title>Mobilní síť</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <style>
-        #map {
-            height: 500px;
-            width: 100%;
-        }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mobilní Operátor Tycoon — Prototyp</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body,#map{height:100%;margin:0;padding:0;font-family:Inter, Arial, sans-serif}
+  .hud{position:absolute;left:10px;top:10px;z-index:1100;background:rgba(255,255,255,0.95);padding:8px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+  .hud div{margin:4px 0}
+  .hamburger{position:absolute;right:10px;top:10px;z-index:1200}
+  .hamburger button{background:#111;color:#fff;border:none;padding:10px;border-radius:8px;cursor:pointer}
+  .menu{position:absolute;right:10px;top:56px;z-index:1200;background:rgba(255,255,255,0.98);padding:12px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.2);display:none}
+  .menu h3{margin:0 0 8px 0}
+  .menu button{display:block;margin:6px 0;padding:8px;border-radius:6px;border:none;background:#333;color:#fff;cursor:pointer;transition:background 0.2s}
+  .menu button:hover{background:#555}
+  .legend{position:absolute;left:10px;bottom:10px;z-index:1100;background:rgba(255,255,255,0.95);padding:8px;border-radius:8px}
+  .legend div{display:flex;align-items:center;margin:4px}
+  .sw{width:18px;height:12px;margin-right:8px;border-radius:3px}
+</style>
 </head>
 <body>
-    <div id="map"></div>
+<div id="map"></div>
+<div class="hud" id="hud">
+  <div><strong>Peněz:</strong> <span id="money">200000</span> Kč</div>
+  <div><strong>Zákazníků:</strong> <span id="customers">1000</span></div>
+  <div><strong>Příjem/s:</strong> <span id="income">0</span> Kč/s</div>
+</div>
+<div class="hamburger">
+  <button id="hambBtn">☰ Menu</button>
+  <div class="menu" id="menu">
+    <h3>Akce</h3>
+    <button id="addTxBtn">Postavit vysílač</button>
+    <button id="addShopBtn">Postavit pobočku</button>
+    <button id="promoBtn">Spustit promo (sleva)</button>
+    <hr />
+    <div style="font-size:12px;color:#fff">Tip: Klikni na mapu pro umístění objektu po zvolení akce.</div>
+  </div>
+</div>
+<div class="legend">
+  <div><div class="sw" style="background:#006400"></div> Výborné</div>
+  <div><div class="sw" style="background:#2ecc71"></div> Velmi dobré</div>
+  <div><div class="sw" style="background:#f1c40f"></div> Dobré</div>
+  <div><div class="sw" style="background:#e67e22"></div> Slabé</div>
+  <div><div class="sw" style="background:#e74c3c"></div> Žádné</div>
+  <div><div class="sw" style="background:#800000"></div> Extrémně slabé</div>
+</div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script><script>
+let money = 200000;
+let customers = 0;
+let incomePerCustomerPerSec = 0.2;
 
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script>
-        var map = L.map('map').setView([50.075, 14.43], 13);
+const prahaCenter = [50.087451, 14.420671];
+const map = L.map('map').setView(prahaCenter, 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
-            maxZoom: 18,
-        }).addTo(map);
+const txLayer = L.layerGroup().addTo(map);
+const shopLayer = L.layerGroup().addTo(map);
+const coverageLayer = L.layerGroup().addTo(map);
 
-        var playerTransmitters = [];
-        var competitorTransmitters = [];
-        var playerTotalEarnings = 300;
-        var competitorTotalEarnings = 0;
-        var playerEarningsPerSecond = 1;
-        var competitorEarningsPerSecond = 0.5;
-        var playerBaseEarningsPerSecond = 1;
-        var competitorBaseEarningsPerSecond = 0.5;
-        var customerEarningsMultiplier = 0.00001; // Zisk za každých 1000 zákazníků
-        var currentTransmitterPrice = 10;
-        var transmitterPriceIncrement = 2;
-        var placingTransmitter = false;
-        var selectedTransmitter = null;
-        var transmitterRadius = 2500;
+const moneyEl = document.getElementById('money');
+const custEl = document.getElementById('customers');
+const incomeEl = document.getElementById('income');
+const menuEl = document.getElementById('menu');
 
-        var customersPerCategory = [0.7, 0.4, 0.1, 0.08, 0.05, 0.01];
+document.getElementById('hambBtn').addEventListener('click', ()=>{menuEl.style.display = menuEl.style.display==='block'?'none':'block'});
 
-        function createTransmitter(e) {
-            if (playerTotalEarnings < currentTransmitterPrice) {
-                alert("Nemáte dostatek peněz na vytvoření vysílače!");
-                return;
-            }
+let mode = null;
+let pendingTxPower = 10;
 
-            var areaType = prompt("Vyberte kategorii urbanizace pro tento vysílač:\n1) Městská oblast centrum\n2) Městská oblast sídliště a předměstí\n3) Městská oblast s průmyslovou zástavbou\n4) Městys\n5) Vesnice\n6) Pole, louky, lesy, rybníky");
+document.getElementById('addTxBtn').addEventListener('click', ()=>{
+  mode = 'tx';
+  pendingTxPower = parseInt(prompt('Zadej výkon vysílače (5,10,20,25) W','10')) || 10;
+  alert('Klikni na mapu pro umístění vysílače.');
+});
 
-            if (!areaType || isNaN(areaType) || areaType < 1 || areaType > 6) {
-                alert("Neplatná volba kategorie, zvolte prosím číslo od 1 do 6.");
-                return;
-            }
+document.getElementById('addShopBtn').addEventListener('click', ()=>{
+  mode = 'shop';
+  alert('Klikni na mapu pro umístění pobočky.');
+});
 
-            playerTotalEarnings -= currentTransmitterPrice;
-            playerEarningsPerSecond = playerBaseEarningsPerSecond + (playerTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
+document.getElementById('promoBtn').addEventListener('click', ()=>{runPromo();});
 
-            var marker = L.marker(e.latlng, { draggable: true }).addTo(map);
-            var circle = L.circle(e.latlng, { radius: transmitterRadius, color: 'blue' }).addTo(map);
+map.on('click', (e)=>{
+  if(mode==='tx'){
+    const cost = costForTx(pendingTxPower);
+    if(money<cost){alert('Nemáš dost peněz na tento vysílač.'); return}
+    money -= cost; updateHUD(); addTransmitter(e.latlng, pendingTxPower);
+    mode=null; menuEl.style.display='none';
+  } else if(mode==='shop'){
+    const cost=50000;
+    if(money<cost){alert('Nemáš dost peněz na pobočku.'); return}
+    money -= cost; updateHUD(); addShop(e.latlng);
+    mode=null; menuEl.style.display='none';
+  }
+});
 
-            marker.bindPopup("Vysílač č. " + (playerTransmitters.length + 1) + "<br>Generuje " + playerEarningsPerSecond.toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
+function costForTx(power) {
+  if (power <= 5) return 10000;
+  if (power >= 25) return 100000;
 
-           marker.on('dragend', function (e) {
-            // Při přetáhnutí markeru na novou pozici aktualizujeme polohu okruhu
-            circle.setLatLng(e.target.getLatLng());
+  const minPower = 5, maxPower = 25;
+  const minCost = 10000, maxCost = 100000;
+  const exponent = 1.5; // >1 = rostoucí rychleji, <1 = pomaleji
 
-            var markerIndex = playerTransmitters.indexOf(marker);
-            if (markerIndex !== -1) {
-                playerTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
-            }
-        });
+  let normalized = (power - minPower) / (maxPower - minPower);
+  let cost = minCost + Math.pow(normalized, exponent) * (maxCost - minCost);
 
-            playerTransmitters.push({ marker: marker, customers: 0, areaType: areaType });
+  return Math.round(cost);
+}
+function addTransmitter(latlng, power){
+  const txIcon = L.icon({
+    iconUrl: 'https://i.imgur.com/v3yKg3b.png', // tvůj obrázek
+    iconSize: [32, 32], // velikost ikony (px)
+    iconAnchor: [16, 32], // bod, který bude přesně na souřadnici markeru (střed spodní části)
+    popupAnchor: [0, -32] // kde se otevře popup vůči ikoně
+  });
 
-            updatePlayerTotalEarnings();
-            updateTransmitterPrice();
+  const marker = L.marker(latlng, {
+    title: `Vysílač ${power}W`,
+    icon: txIcon
+  }).addTo(txLayer);
 
-            placingTransmitter = false;
-            document.getElementById("map").style.cursor = "default";
+  marker.bindPopup(`<b>Vysílač</b><br>${power} W`);
+  computeCoverage();
+}
 
-            // Konkurenční operátor staví vlastní vysílače
-            buildCompetitorTransmitter();
-        }
+function addShop(latlng){
+  const marker = L.marker(latlng,{title:'Pobočka',icon:L.divIcon({className:'shop-icon',html:'🏬',iconSize:[28,28]})}).addTo(shopLayer);
+  marker.bindPopup('<b>Pobočka</b>');
+  customers += 500; updateHUD();
+}
 
-        function buildCompetitorTransmitter() {
-            if (competitorTotalEarnings < currentTransmitterPrice) {
-                return;
-            }
+function computeCoverage() {
+  coverageLayer.clearLayers();
 
-            var areaType = Math.floor(Math.random() * 6) + 1;
+  const txs = [];
+  txLayer.eachLayer(l => {
+    txs.push({
+      latlng: l.getLatLng(),
+      power: parseInt(l.options.title?.match(/(\d+)/)?.[0] || 10)
+    });
+  });
+  if (txs.length === 0) return;
 
-            competitorTotalEarnings -= currentTransmitterPrice;
-            competitorEarningsPerSecond = competitorBaseEarningsPerSecond + (competitorTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
+  // Zvýšený krok, méně čtverců → bezpečné i na mobilu
+  let step;
+  const zoom = map.getZoom();
+  if (zoom < 10) step = 0.004;      // ~400 m
+  else if (zoom < 12) step = 0.002; // ~200 m
+  else step = 0.001;                // ~100 m
 
-            var lat, lng;
-            var validPosition = false;
-            var attempts = 0;
-            var maxAttempts = 100;
+  const lats = txs.map(t => t.latlng.lat), lngs = txs.map(t => t.latlng.lng);
+  const south = Math.min(...lats) - 0.04, north = Math.max(...lats) + 0.04;
+  const west = Math.min(...lngs) - 0.04, east = Math.max(...lngs) + 0.04;
 
-            while (!validPosition && attempts < maxAttempts) {
-                var randomTransmitter = playerTransmitters[Math.floor(Math.random() * playerTransmitters.length)];
-                var playerLat = randomTransmitter.marker.getLatLng().lat;
-                var playerLng = randomTransmitter.marker.getLatLng().lng;
+  const baseColors = ['#00ff00', '#ffff00', '#ffa500', '#ff0000'];
+  const colorBands = [];
+  for (let i = 0; i < baseColors.length - 1; i++) {
+    let start = hexToRgb(baseColors[i]);
+    let end = hexToRgb(baseColors[i + 1]);
+    for (let j = 0; j < 5; j++) {
+      let t = j / 4;
+      let r = Math.round(start.r + (end.r - start.r) * t);
+      let g = Math.round(start.g + (end.g - start.g) * t);
+      let b = Math.round(start.b + (end.b - start.b) * t);
+      colorBands.push(rgbToHex(r, g, b));
+    }
+  }
+  colorBands.push(baseColors[baseColors.length - 1]);
 
-                lat = playerLat + (Math.random() - 0.4) * 0.4;
-                lng = playerLng + (Math.random() - 0.4) * 0.4;
+  const signalScale = 12;
+  const decay = 1.4;
+  const noiseStrength = 0.25;
+  const overlapFactor = 0.9;
 
-                validPosition = checkValidPosition(lat, lng);
-                attempts++;
-            }
+  for (let lat = south; lat <= north; lat += step) {
+    for (let lng = west; lng <= east; lng += step) {
+      const pt = turf.point([lng, lat]);
+      let totalSignal = 0;
 
-            if (!validPosition) {
-                console.log("Nepodařilo se najít vhodnou pozici pro konkurenční vysílač.");
-                return;
-            }
+      txs.forEach(t => {
+        let dist = turf.distance(turf.point([t.latlng.lng, t.latlng.lat]), pt, { units: 'kilometers' });
+        if (dist > signalScale) return;
 
-            var marker = L.marker([lat, lng], { draggable: true, icon: L.icon({ iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], tooltipAnchor: [16, -28], shadowSize: [41, 41] }) }).addTo(map);
-            var circle = L.circle([lat, lng], { radius: transmitterRadius, color: 'red' }).addTo(map);
+        let signal = t.power / Math.pow(Math.max(dist, 0.05), decay);
+        signal *= (1 - noiseStrength / 2 + Math.random() * noiseStrength);
+        if (dist < signalScale / 4) signal *= 1.2;
 
-            marker.bindPopup("Konkurenční vysílač č. " + (competitorTransmitters.length + 1) + "<br>Generuje " + competitorEarningsPerSecond.toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + areaType);
+        totalSignal += signal * overlapFactor;
+      });
 
-            marker.on('dragend', function (e) {
-                var markerIndex = competitorTransmitters.indexOf(marker);
-                if (markerIndex !== -1) {
-                    competitorTransmitters[markerIndex].marker.setLatLng(e.target.getLatLng());
-                    circle.setLatLng(e.target.getLatLng());
-                }
-            });
+      const norm = Math.log1p(totalSignal) * 3.5;
+      const idx = Math.max(0, Math.min(colorBands.length - 1, colorBands.length - 1 - Math.floor(norm)));
+      const color = colorBands[idx];
+      const opacity = 0.4;
 
-            competitorTransmitters.push({ marker: marker, customers: 0, areaType: areaType });
+      // Bez canvasu – běžné L.rectangle
+      const rect = L.rectangle(
+        [
+          [lat, lng],
+          [lat + step, lng + step]
+        ],
+        { fillColor: color, fillOpacity: opacity, stroke: false }
+      );
 
-            // Zvýšení ceny pro další vysílač
-            currentTransmitterPrice += transmitterPriceIncrement;
+      coverageLayer.addLayer(rect);
+    }
+  }
+}  
+function hexToRgb(hex){
+  let num = parseInt(hex.replace('#',''),16);
+  return {r:(num>>16)&255, g:(num>>8)&255, b:num&255};
+}
 
-            updateCompetitorTotalEarnings();
-            updateTransmitterPrice();
-        }
+function rgbToHex(r,g,b){
+  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}  function updateHUD(){
+  moneyEl.textContent = Math.round(money).toLocaleString('cs-CZ');
+  custEl.textContent = Math.round(customers).toLocaleString('cs-CZ');
+  incomeEl.textContent = (customers*incomePerCustomerPerSec).toFixed(2);
+}
 
-        function selectTransmitter(marker) {
-            if (selectedTransmitter) {
-                selectedTransmitter.marker.setIcon(L.Icon.Default);
-            }
-            selectedTransmitter = marker;
-            selectedTransmitter.marker.setIcon(L.icon({
-                iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/images/marker-icon.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                tooltipAnchor: [16, -28],
-                shadowSize: [41, 41]
-            }));
-        }
+setInterval(()=>{
+  const income = customers*incomePerCustomerPerSec;
+  money += income;
+  updateHUD();
+},1000);
+  
+  // Přirozený růst zákazníků
+setInterval(()=>{
+  // náhodně 1–5 nových zákazníků za sekundu
+  const newCust = Math.floor(Math.random() * 3) + 1;
+  customers += newCust;
+  updateHUD();
+},1000);
 
-        function checkValidPosition(lat, lng) {
-            for (var i = 0; i < playerTransmitters.length; i++) {
-                var distance = map.distance([lat, lng], playerTransmitters[i].marker.getLatLng());
-                if (distance <= (transmitterRadius * 2)) {
-                    return false;
-                }
-            }
+function runPromo(){
+  const cost=200000;
+  if(money<cost){alert('Nemáš dost peněz na promo.'); return}
+  money-=cost; updateHUD();
+  customers+=1000; updateHUD();
+  setTimeout(()=>{customers-=1000;},20000);
+}
 
-            for (var i = 0; i < competitorTransmitters.length; i++) {
-                var distance = map.distance([lat, lng], competitorTransmitters[i].marker.getLatLng());
-                if (distance <= (transmitterRadius * 2)) {
-                    return false;
-                }
-            }
+addTransmitter(L.latLng(prahaCenter[0]+0.01,prahaCenter[1]+0.01),10);
+updateHUD();
 
-            return true;
-        }
-
-        function updatePlayerTotalEarnings() {
-            document.getElementById("player-total-earnings").textContent = "Vaše celkové výdělky: " + playerTotalEarnings.toFixed(2) + " Kč";
-        }
-
-        function updateCompetitorTotalEarnings() {
-            document.getElementById("competitor-total-earnings").textContent = "Výdělky konkurence: " + competitorTotalEarnings.toFixed(2) + " Kč";
-        }
-
-        function updateTransmitterPrice() {
-            document.getElementById("transmitter-price").textContent = "Cena vysílače: " + currentTransmitterPrice.toFixed(2) + " Kč";
-        }
-
-        function updateEarningsPerSecond() {
-            document.getElementById("player-earnings-per-second").textContent = "Výdělky za sekundu (Hráč): " + playerEarningsPerSecond.toFixed(2) + " Kč/s";
-            document.getElementById("competitor-earnings-per-second").textContent = "Výdělky za sekundu (Konkurence): " + competitorEarningsPerSecond.toFixed(2) + " Kč/s";
-        }
-
-        function updateCustomers() {
-            var totalCustomers = 0;
-            for (var i = 0; i < playerTransmitters.length; i++) {
-                playerTransmitters[i].customers += customersPerCategory[playerTransmitters[i].areaType - 1];
-                totalCustomers += playerTransmitters[i].customers;
-                playerTransmitters[i].marker.setPopupContent("Vysílač č. " + (i + 1) + "<br>Generuje " + (playerBaseEarningsPerSecond + playerTransmitters[i].customers * customerEarningsMultiplier).toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + playerTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + playerTransmitters[i].customers.toFixed(0));
-            }
-
-            for (var i = 0; i < competitorTransmitters.length; i++) {
-                competitorTransmitters[i].customers += customersPerCategory[competitorTransmitters[i].areaType - 1];
-                totalCustomers += competitorTransmitters[i].customers;
-                competitorTransmitters[i].marker.setPopupContent("Konkurenční vysílač č. " + (i + 1) + "<br>Generuje " + (competitorBaseEarningsPerSecond + competitorTransmitters[i].customers * customerEarningsMultiplier).toFixed(2) + " Kč/s<br>Kategorie urbanizace: " + competitorTransmitters[i].areaType + "<br>Zákazníci v okruhu: " + competitorTransmitters[i].customers.toFixed(0));
-            }
-
-            document.getElementById("total-customers").textContent = "Celkový počet zákazníků: " + totalCustomers.toFixed(0);
-        }
-
-        function startGame() {
-            setInterval(function () {
-                updateCustomers();
-            }, 1000);
-
-            setInterval(function () {
-                playerTotalEarnings += playerEarningsPerSecond + (playerTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
-                competitorTotalEarnings += competitorEarningsPerSecond + (competitorTransmitters.reduce((sum, transmitter) => sum + transmitter.customers, 0) * customerEarningsMultiplier);
-                updatePlayerTotalEarnings();
-                updateCompetitorTotalEarnings();
-            }, 1000);
-
-            map.on('click', function (e) {
-                if (!placingTransmitter) {
-                    createTransmitter(e);
-                }
-            });
-
-            // Konkurenční operátor staví vlastní vysílače každých 5 sekund
-            setInterval(function () {
-                buildCompetitorTransmitter();
-            }, 5000);
-        }
-
-        // Spustíme hru při načtení stránky
-        window.onload = startGame;
-    </script>
-
-    <h2>Aktuální stav:</h2>
-    <p id="player-total-earnings"></p>
-    <p id="competitor-total-earnings"></p>
-    <p id="player-earnings-per-second"></p>
-    <p id="competitor-earnings-per-second"></p>
-    <p id="transmitter-price"></p>
-    <p id="total-customers"></p>
-
-    <script>
-        // Počáteční výdělky
-        updatePlayerTotalEarnings();
-        updateCompetitorTotalEarnings();
-        updateTransmitterPrice();
-        updateEarningsPerSecond();
-        updateCustomers();
-    </script>
-</body>
+</script></body>
 </html>
