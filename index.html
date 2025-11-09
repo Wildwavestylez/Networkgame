@@ -40,12 +40,12 @@
   </div>
 </div>
 <div class="legend">
-  <div><div class="sw" style="background:#006400"></div> Výborné</div>
-  <div><div class="sw" style="background:#2ecc71"></div> Velmi dobré</div>
-  <div><div class="sw" style="background:#f1c40f"></div> Dobré</div>
-  <div><div class="sw" style="background:#e67e22"></div> Slabé</div>
-  <div><div class="sw" style="background:#e74c3c"></div> Žádné</div>
-  <div><div class="sw" style="background:#800000"></div> Extrémně slabé</div>
+  <div><div class="sw" style="background:#006400"></div> Výborný</div>
+  <div><div class="sw" style="background:#2ecc71"></div> Velmi dobrý</div>
+  <div><div class="sw" style="background:#f1c40f"></div> Dobrý</div>
+  <div><div class="sw" style="background:#e67e22"></div> už nic moc</div>
+  <div><div class="sw" style="background:#e74c3c"></div> slabý</div>
+  <div><div class="sw" style="background:#800000"></div> žádný</div>
 </div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script><script>
 let money = 200000;
 let customers = 0;
@@ -54,7 +54,50 @@ let incomePerCustomerPerSec = 0.2;
 const prahaCenter = [50.087451, 14.420671];
 const map = L.map('map').setView(prahaCenter, 12);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+// 🔁 Schovávání ikon vysílačů při oddálení
+map.on('zoomend', () => {
+  const zoom = map.getZoom();
+  if (zoom < 11) {
+    map.removeLayer(txLayer); // schová všechny vysílače
+  } else {
+    if (!map.hasLayer(txLayer)) map.addLayer(txLayer); // znovu je zobrazí
+  }
+});
+  
+  loadGame();
+  
+  
+  
+  function loadGame() {
+  const stateStr = localStorage.getItem('mobOperatorGame');
+  if (!stateStr) return;
 
+  try {
+    const state = JSON.parse(stateStr);
+    money = state.money || 200000;
+    customers = state.customers || 1000;
+
+    // načíst vysílače
+    state.txs?.forEach(t => {
+      addTransmitter(t.latlng, t.power);
+    });
+
+    // načíst pobočky
+    state.shops?.forEach(s => {
+      addShop(s.latlng);
+    });
+
+    updateHUD();
+    console.log('Stav hry načten');
+  } catch(e) {
+    console.error('Chyba při načítání stavu hry:', e);
+  }
+}
+  
+  setInterval(saveGame, 60000); // 60000 ms = 60 s
+
+ 
+  
 const txLayer = L.layerGroup().addTo(map);
 const shopLayer = L.layerGroup().addTo(map);
 const coverageLayer = L.layerGroup().addTo(map);
@@ -193,7 +236,7 @@ function computeCoverage() {
   colorBands.push(baseColors[baseColors.length - 1]);
 
   const signalScale = 12;
-  const decay = 1.4;
+  const decay = 1.8;
   const noiseStrength = 0.25;
   const overlapFactor = 0.9;
 
@@ -213,7 +256,7 @@ function computeCoverage() {
         totalSignal += signal * overlapFactor;
       });
 
-      const norm = Math.log1p(totalSignal) * 3.5;
+      const norm = Math.log1p(totalSignal) * 5;
       const idx = Math.max(0, Math.min(colorBands.length - 1, colorBands.length - 1 - Math.floor(norm)));
       const color = colorBands[idx];
       const opacity = 0.4;
@@ -236,7 +279,7 @@ const computeCoverageDebounced = debounce(computeCoverage, 150);
 
 map.on('moveend', computeCoverageDebounced);
 map.on('zoomend', computeCoverageDebounced);  
-  
+
 function hexToRgb(hex){
   let num = parseInt(hex.replace('#',''),16);
   return {r:(num>>16)&255, g:(num>>8)&255, b:num&255};
@@ -255,7 +298,7 @@ setInterval(()=>{
   money += income;
   updateHUD();
 },1000);
-  
+
   // Přirozený růst zákazníků
 setInterval(()=>{
   // náhodně 1–5 nových zákazníků za sekundu
@@ -274,6 +317,61 @@ function runPromo(){
 
 addTransmitter(L.latLng(prahaCenter[0]+0.01,prahaCenter[1]+0.01),10);
 updateHUD();
+  
+  function saveGame() {
+  const txs = [];
+  txLayer.eachLayer(l => {
+    txs.push({
+      latlng: l.getLatLng(),
+      power: parseInt(l.options.title?.match(/(\d+)/)?.[0] || 10)
+    });
+  });
+
+  const shops = [];
+  shopLayer.eachLayer(l => {
+    shops.push({
+      latlng: l.getLatLng()
+    });
+  });
+
+  const state = {
+    money,
+    customers,
+    txs,
+    shops
+  };
+
+  localStorage.setItem('mobOperatorGame', JSON.stringify(state));
+  console.log('Stav hry uložen');
+}
+  
+  function loadGame() {
+  const stateStr = localStorage.getItem('mobOperatorGame');
+  if (!stateStr) return;
+
+  try {
+    const state = JSON.parse(stateStr);
+    money = state.money || 200000;
+    customers = state.customers || 1000;
+
+    // načíst vysílače
+    state.txs?.forEach(t => {
+      addTransmitter(t.latlng, t.power);
+    });
+
+    // načíst pobočky
+    state.shops?.forEach(s => {
+      addShop(s.latlng);
+    });
+
+    updateHUD();
+    console.log('Stav hry načten');
+  } catch(e) {
+    console.error('Chyba při načítání stavu hry:', e);
+  }
+}
+  
+  setInterval(saveGame, 60000); // 60000 ms = 60 s
 
 </script></body>
 </html>
