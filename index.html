@@ -64,40 +64,6 @@ map.on('zoomend', () => {
   }
 });
   
-  loadGame();
-  
-  
-  
-  function loadGame() {
-  const stateStr = localStorage.getItem('mobOperatorGame');
-  if (!stateStr) return;
-
-  try {
-    const state = JSON.parse(stateStr);
-    money = state.money || 200000;
-    customers = state.customers || 1000;
-
-    // načíst vysílače
-    state.txs?.forEach(t => {
-      addTransmitter(t.latlng, t.power);
-    });
-
-    // načíst pobočky
-    state.shops?.forEach(s => {
-      addShop(s.latlng);
-    });
-
-    updateHUD();
-    console.log('Stav hry načten');
-  } catch(e) {
-    console.error('Chyba při načítání stavu hry:', e);
-  }
-}
-  
-  setInterval(saveGame, 60000); // 60000 ms = 60 s
-
- 
-  
 const txLayer = L.layerGroup().addTo(map);
 const shopLayer = L.layerGroup().addTo(map);
 const coverageLayer = L.layerGroup().addTo(map);
@@ -110,11 +76,11 @@ const menuEl = document.getElementById('menu');
 document.getElementById('hambBtn').addEventListener('click', ()=>{menuEl.style.display = menuEl.style.display==='block'?'none':'block'});
 
 let mode = null;
-let pendingTxPower = 25;
+let pendingTxPower = 10;
 
 document.getElementById('addTxBtn').addEventListener('click', ()=>{
   mode = 'tx';
-  pendingTxPower = parseInt(prompt('Zadej výkon vysílače (5,10,20,25) W','10')) || 10;
+  pendingTxPower = parseInt(prompt('Zadej výkon vysílače (5,10,20,25) W','25')) || 10;
   alert('Klikni na mapu pro umístění vysílače.');
 });
 
@@ -372,6 +338,9 @@ updateHUD();
 }
   
   setInterval(saveGame, 60000); // 60000 ms = 60 s
-
+   loadGame();
+  updateHUD();
+  computeCoverage()
+  
 </script></body>
 </html>
