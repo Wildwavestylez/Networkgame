@@ -46,8 +46,10 @@
   <div><div class="sw" style="background:#e67e22"></div> už nic moc</div>
   <div><div class="sw" style="background:#e74c3c"></div> slabý</div>
   <div><div class="sw" style="background:#800000"></div> žádný</div>
-</div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script><script>
-<script src="https://cdn.jsdelivr.net/npm/idb@8/build/iife/index-min.js"></script>
+  <button onclick="clearGame()">Vymazat uloženou hru</button>
+</div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+ <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  <script>
 let money = 200000;
 let customers = 0;
 let incomePerCustomerPerSec = 0.2;
@@ -64,18 +66,12 @@ map.on('zoomend', () => {
     if (!map.hasLayer(txLayer)) map.addLayer(txLayer); // znovu je zobrazí
   }
 });
-  
+
 const txLayer = L.layerGroup().addTo(map);
 const shopLayer = L.layerGroup().addTo(map);
 const coverageLayer = L.layerGroup().addTo(map);
 
-const dbPromise = idb.openDB('mobOperatorDB', 1, {
-  upgrade(db) {
-    db.createObjectStore('state', { keyPath: 'id' });
-    db.createObjectStore('txs', { keyPath: 'id', autoIncrement: true });
-    db.createObjectStore('shops', { keyPath: 'id', autoIncrement: true });
-  },
-});
+
 
 const moneyEl = document.getElementById('money');
 const custEl = document.getElementById('customers');
@@ -268,19 +264,21 @@ function rgbToHex(r,g,b){
   incomeEl.textContent = (customers*incomePerCustomerPerSec).toFixed(2);
 }
 
-setInterval(()=>{
-  const income = customers*incomePerCustomerPerSec;
+// pak v intervalu příjmů peněz
+setInterval(() => {
+  const income = customers * incomePerCustomerPerSec;
   money += income;
   updateHUD();
-},1000);
-
+  checkCountryExpansion();
+}, 1000);
+  
+  
   // Přirozený růst zákazníků
-setInterval(()=>{
-  // náhodně 1–5 nových zákazníků za sekundu
-  const newCust = Math.floor(Math.random() * 15) + 1;
+setInterval(() => {
+  const newCust = txLayer.getLayers().length; // 1 zákazník / vysílač / sec
   customers += newCust;
   updateHUD();
-},1000);
+}, 1000);
 
 function runPromo(){
   const cost=200000;
@@ -289,67 +287,130 @@ function runPromo(){
   customers+=1000; updateHUD();
   setTimeout(()=>{customers-=1000;},20000);
 }
+  
+  function checkCountryExpansion() {
+  for (let milestone of countryMilestones) {
+    if (!milestone.unlocked && money >= milestone.cost) {
+      if (confirm(`Vláda ${milestone.name} vás požádala o vybudování sítě. Licence stojí ${milestone.cost.toLocaleString()} Kč. Chceš ji koupit?`)) {
+        money = 0;
+        milestone.unlocked = true;
+        alert(`Gratulace! Nyní můžeš budovat síť na ${milestone.name}.`);
+      }
+    }
+  }
+}
 
 addTransmitter(L.latLng(prahaCenter[0]+0.01,prahaCenter[1]+0.01),10);
 updateHUD();
-  
-  async function saveGame() {
-  const db = await dbPromise;
-  await db.put('state', { id: 'main', money, customers });
 
-  // Smazat staré a uložit nové vysílače
-  const txTx = db.transaction('txs', 'readwrite');
-  await txTx.store.clear();
+  // --- IndexedDB pro hru Mobilní Operátor Tycoon ---
+const DB_NAME = 'MobOperatorDB';
+const DB_VERSION = 1;
+let db;
+
+// Inicializace DB
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains('txs')) db.createObjectStore('txs', { keyPath: 'id', autoIncrement: true });
+      if (!db.objectStoreNames.contains('shops')) db.createObjectStore('shops', { keyPath: 'id', autoIncrement: true });
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+    };
+
+    request.onsuccess = (e) => { db = e.target.result; resolve(); };
+    request.onerror = (e) => reject(e);
+  });
+}
+
+// Uložení hry do IndexedDB
+async function saveGame() {
+  if (!db) await initDB();
+  const tx = db.transaction(['txs', 'shops', 'meta'], 'readwrite');
+  const txStore = tx.objectStore('txs');
+  const shopStore = tx.objectStore('shops');
+  const metaStore = tx.objectStore('meta');
+
+  // Vyčistit stará data
+  txStore.clear();
+  shopStore.clear();
+
+  // Vysílače
   txLayer.eachLayer(l => {
-    txTx.store.add({
-      lat: l.getLatLng().lat,
-      lng: l.getLatLng().lng,
+    txStore.add({
+      latlng: l.getLatLng(),
       power: parseInt(l.options.title?.match(/(\d+)/)?.[0] || 10)
     });
   });
-  await txTx.done;
 
-  const shopTx = db.transaction('shops', 'readwrite');
-  await shopTx.store.clear();
+  // Pobočky
   shopLayer.eachLayer(l => {
-    shopTx.store.add({
-      lat: l.getLatLng().lat,
-      lng: l.getLatLng().lng
-    });
+    shopStore.add({ latlng: l.getLatLng() });
   });
-  await shopTx.done;
 
-  console.log('💾 IndexedDB: stav uložen');
+  // Meta data (peníze, zákazníci)
+  metaStore.put({ key: 'state', money, customers });
+
+  console.log('IndexedDB: stav uložen');
+}
+
+// Načtení hry z IndexedDB
+async function loadGame() {
+  if (!db) await initDB();
+  const tx = db.transaction(['txs', 'shops', 'meta'], 'readonly');
+  const txStore = tx.objectStore('txs');
+  const shopStore = tx.objectStore('shops');
+  const metaStore = tx.objectStore('meta');
+
+  // Načíst meta data
+  const metaReq = metaStore.get('state');
+  metaReq.onsuccess = () => {
+    const meta = metaReq.result;
+    if (meta) {
+      money = meta.money || 200000;
+      customers = meta.customers || 1000;
+      updateHUD();
+    }
+  };
+
+  // Načíst vysílače
+  txStore.openCursor().onsuccess = (e) => {
+    const cursor = e.target.result;
+    if (cursor) {
+      const { latlng, power } = cursor.value;
+      addTransmitter(latlng, power);
+      cursor.continue();
+    }
+  };
+
+  // Načíst pobočky
+  shopStore.openCursor().onsuccess = (e) => {
+    const cursor = e.target.result;
+    if (cursor) {
+      const { latlng } = cursor.value;
+      addShop(latlng);
+      cursor.continue();
+    }
+  };
+
+  console.log('IndexedDB: hra načtena');
 }
   
-  async function loadGame() {
-  const db = await dbPromise;
-
-  const main = await db.get('state', 'main');
-  if (main) {
-    money = main.money;
-    customers = main.customers;
-  }
-
-  const txs = await db.getAll('txs');
-  for (const t of txs) {
-    addTransmitter(L.latLng(t.lat, t.lng), t.power);
-  }
-
-  const shops = await db.getAll('shops');
-  for (const s of shops) {
-    addShop(L.latLng(s.lat, s.lng));
-  }
-
-  console.log(`✅ Načteno ${txs.length} vysílačů a ${shops.length} poboček`);
-  updateHUD();
-  computeCoverage();
+  async function clearGame() {
+  if (!db) await initDB();
+  const tx = db.transaction(['txs', 'shops', 'meta'], 'readwrite');
+  tx.objectStore('txs').clear();
+  tx.objectStore('shops').clear();
+  tx.objectStore('meta').clear();
+  console.log('IndexedDB: vymazáno');
 }
-  
+
   setInterval(saveGame, 60000); // 60000 ms = 60 s
    loadGame();
   updateHUD();
   computeCoverage()
-  
+
 </script></body>
 </html>
