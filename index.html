@@ -288,18 +288,58 @@ function runPromo(){
   setTimeout(()=>{customers-=1000;},20000);
 }
   
-  function checkCountryExpansion() {
-  for (let milestone of countryMilestones) {
+  // --- seznam milestone pro odemykání zemí ---
+let countryMilestones = [
+  { name: 'Slovensko', cost: 10_000_000, unlocked: false },
+  { name: 'Rakousko', cost: 50_000_000, unlocked: false },
+  { name: 'Maďarsko', cost: 80_000_000, unlocked: false },
+  { name: 'Slovinsko', cost: 40_000_000, unlocked: false },
+  { name: 'Litva', cost: 50_000_000, unlocked: false },
+  { name: 'Lotyšsko', cost: 60_000_000, unlocked: false },
+  { name: 'Estonsko', cost: 70_000_000, unlocked: false },
+  { name: 'Polsko', cost: 80_000_000, unlocked: false },
+  { name: 'Chorvatsko', cost: 90_000_000, unlocked: false },
+  { name: 'Německo', cost: 100_000_000, unlocked: false },
+  { name: 'Švýcarsko', cost: 110_000_000, unlocked: false },
+  { name: 'Itálie', cost: 120_000_000, unlocked: false },
+  { name: 'Holandsko', cost: 130_000_000, unlocked: false },
+  { name: 'Belgie & Lucembursko', cost: 140_000_000, unlocked: false },
+  { name: 'UK', cost: 150_000_000, unlocked: false },
+  { name: 'Švédsko', cost: 160_000_000, unlocked: false },
+  { name: 'Finsko', cost: 170_000_000, unlocked: false },
+  { name: 'Norsko', cost: 180_000_000, unlocked: false },
+  { name: 'Rumunsko', cost: 190_000_000, unlocked: false },
+  { name: 'Francie', cost: 200_000_000, unlocked: false },
+  { name: 'Bulharsko', cost: 210_000_000, unlocked: false },
+  { name: 'Španělsko', cost: 220_000_000, unlocked: false },
+  { name: 'Portugalsko', cost: 230_000_000, unlocked: false },
+  { name: 'Řecko', cost: 240_000_000, unlocked: false },
+  { name: 'Turecko', cost: 250_000_000, unlocked: false },
+  { name: 'Balkán bundle (Bosna, Srbsko, Černá Hora, Kosovo, Albánie, Makedonie)', cost: 300_000_000, unlocked: false },
+  { name: 'Austrálie', cost: 350_000_000, unlocked: false },
+  { name: 'Kanada', cost: 400_000_000, unlocked: false },
+  { name: 'USA', cost: 500_000_000, unlocked: false },
+  { name: 'Malajsie', cost: 600_000_000, unlocked: false },
+  { name: 'Indonésie', cost: 700_000_000, unlocked: false },
+  { name: 'Čína', cost: 800_000_000, unlocked: false },
+  { name: 'Indie', cost: 1_000_000_000, unlocked: false }
+];
+
+// --- kontrola a odemykání zemí ---
+function checkCountryExpansion() {
+  for (let i = countryMilestones.length - 1; i >= 0; i--) { // iterujeme odzadu pro bezpečné mazání
+    const milestone = countryMilestones[i];
     if (!milestone.unlocked && money >= milestone.cost) {
       if (confirm(`Vláda ${milestone.name} vás požádala o vybudování sítě. Licence stojí ${milestone.cost.toLocaleString()} Kč. Chceš ji koupit?`)) {
-        money = 0;
+        money = 0; // reset po zakoupení
         milestone.unlocked = true;
         alert(`Gratulace! Nyní můžeš budovat síť na ${milestone.name}.`);
+        // odstraníme ze seznamu, aby se už nekontrolovalo
+        countryMilestones.splice(i, 1);
       }
     }
   }
 }
-
 addTransmitter(L.latLng(prahaCenter[0]+0.01,prahaCenter[1]+0.01),10);
 updateHUD();
 
