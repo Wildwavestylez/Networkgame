@@ -273,11 +273,22 @@ setInterval(() => {
 }, 1000);
   
   
-  // Přirozený růst zákazníků
+  // Přirozený růst zákazníků – jemnější inkrement
+let customerAccumulator = 0;
+
 setInterval(() => {
-  const newCust = txLayer.getLayers().length; // 1 zákazník / vysílač / sec
-  customers += newCust;
-  updateHUD();
+  const towers = txLayer.getLayers().length;
+  const growthRate = 0.1; // zákazníků za sekundu na věž (změň třeba na 0.05)
+  
+  customerAccumulator += towers * growthRate;
+  
+  // Přidáme jen celé zákazníky a zbytek si necháme na příště
+  if (customerAccumulator >= 1) {
+    const whole = Math.floor(customerAccumulator);
+    customers += whole;
+    customerAccumulator -= whole;
+    updateHUD();
+  }
 }, 1000);
 
 function runPromo(){
@@ -292,37 +303,39 @@ function runPromo(){
 let countryMilestones = [
   { name: 'Slovensko', cost: 10_000_000, unlocked: false },
   { name: 'Rakousko', cost: 50_000_000, unlocked: false },
-  { name: 'Maďarsko', cost: 80_000_000, unlocked: false },
-  { name: 'Slovinsko', cost: 40_000_000, unlocked: false },
-  { name: 'Litva', cost: 50_000_000, unlocked: false },
-  { name: 'Lotyšsko', cost: 60_000_000, unlocked: false },
-  { name: 'Estonsko', cost: 70_000_000, unlocked: false },
-  { name: 'Polsko', cost: 80_000_000, unlocked: false },
-  { name: 'Chorvatsko', cost: 90_000_000, unlocked: false },
-  { name: 'Německo', cost: 100_000_000, unlocked: false },
-  { name: 'Švýcarsko', cost: 110_000_000, unlocked: false },
-  { name: 'Itálie', cost: 120_000_000, unlocked: false },
-  { name: 'Holandsko', cost: 130_000_000, unlocked: false },
-  { name: 'Belgie & Lucembursko', cost: 140_000_000, unlocked: false },
-  { name: 'UK', cost: 150_000_000, unlocked: false },
-  { name: 'Švédsko', cost: 160_000_000, unlocked: false },
-  { name: 'Finsko', cost: 170_000_000, unlocked: false },
-  { name: 'Norsko', cost: 180_000_000, unlocked: false },
-  { name: 'Rumunsko', cost: 190_000_000, unlocked: false },
-  { name: 'Francie', cost: 200_000_000, unlocked: false },
-  { name: 'Bulharsko', cost: 210_000_000, unlocked: false },
-  { name: 'Španělsko', cost: 220_000_000, unlocked: false },
-  { name: 'Portugalsko', cost: 230_000_000, unlocked: false },
-  { name: 'Řecko', cost: 240_000_000, unlocked: false },
-  { name: 'Turecko', cost: 250_000_000, unlocked: false },
+  { name: 'Maďarsko', cost: 100_000_000, unlocked: false },
+  { name: 'Slovinsko', cost: 200_000_000, unlocked: false },
+  { name: 'Litva', cost: 250_000_000, unlocked: false },
+  { name: 'Lotyšsko', cost: 300_000_000, unlocked: false },
+  { name: 'Estonsko', cost: 350_000_000, unlocked: false },
+  { name: 'Polsko', cost: 400_000_000, unlocked: false },
+  { name: 'Chorvatsko', cost: 450_000_000, unlocked: false },
+  { name: 'Německo', cost: 500_000_000, unlocked: false },
+  { name: 'Švýcarsko', cost: 550_000_000, unlocked: false },
+  { name: 'Itálie', cost: 600_000_000, unlocked: false },
+  { name: 'Holandsko', cost: 650_000_000, unlocked: false },
+  { name: 'Belgie & Lucembursko', cost: 700_000_000, unlocked: false },
+  { name: 'UK', cost: 750_000_000, unlocked: false },
+    { name: 'Irsko', cost: 780_000_000, unlocked: false },
+  { name: 'Švédsko', cost: 800_000_000, unlocked: false },
+    { name: 'Dánsko', cost: 820_000_000, unlocked: false },
+  { name: 'Finsko', cost: 850_000_000, unlocked: false },
+  { name: 'Norsko', cost: 900_000_000, unlocked: false },
+  { name: 'Rumunsko a Moldávie', cost: 950_000_000, unlocked: false },
+  { name: 'Francie', cost: 1_000_000_000, unlocked: false },
+  { name: 'Bulharsko', cost: 1_100_000_000, unlocked: false },
+  { name: 'Španělsko', cost: 1_200_000_000, unlocked: false },
+  { name: 'Portugalsko', cost: 1_300_000_000, unlocked: false },
+  { name: 'Řecko', cost: 1_400_000_000, unlocked: false },
+  { name: 'Turecko', cost: 1_500_000_000, unlocked: false },
   { name: 'Balkán bundle (Bosna, Srbsko, Černá Hora, Kosovo, Albánie, Makedonie)', cost: 300_000_000, unlocked: false },
-  { name: 'Austrálie', cost: 350_000_000, unlocked: false },
-  { name: 'Kanada', cost: 400_000_000, unlocked: false },
-  { name: 'USA', cost: 500_000_000, unlocked: false },
-  { name: 'Malajsie', cost: 600_000_000, unlocked: false },
-  { name: 'Indonésie', cost: 700_000_000, unlocked: false },
-  { name: 'Čína', cost: 800_000_000, unlocked: false },
-  { name: 'Indie', cost: 1_000_000_000, unlocked: false }
+  { name: 'Austrálie', cost: 1_600_000_000, unlocked: false },
+  { name: 'Kanada', cost: 1_800_000_000, unlocked: false },
+  { name: 'USA', cost: 2_000_000_000, unlocked: false },
+  { name: 'Malajsie', cost: 2_500_000_000, unlocked: false },
+  { name: 'Indonésie', cost: 2_700_000_000, unlocked: false },
+  { name: 'Čína', cost: 3_000_000_000, unlocked: false },
+  { name: 'Indie', cost: 5_000_000_000, unlocked: false }
 ];
 
 // --- kontrola a odemykání zemí ---
