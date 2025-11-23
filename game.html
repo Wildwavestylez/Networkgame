@@ -125,21 +125,24 @@ function costForTx(power) {
   return Math.round(cost);
 }
 
-function addTransmitter(latlng, power){
-  const txIcon = L.icon({
-    iconUrl: 'https://i.imgur.com/v3yKg3b.png', // tvůj obrázek
-    iconSize: [32, 32], // velikost ikony (px)
-    iconAnchor: [16, 32], // bod, který bude přesně na souřadnici markeru (střed spodní části)
-    popupAnchor: [0, -32] // kde se otevře popup vůči ikoně
-  });
+function addTransmitter(latlng, power, skipCoverage = false){
+    const txIcon = L.icon({
+        iconUrl: 'https://i.imgur.com/v3yKg3b.png',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+    });
 
-  const marker = L.marker(latlng, {
-    title: `Vysílač ${power}W`,
-    icon: txIcon
-  }).addTo(txLayer);
+    const marker = L.marker(latlng, {
+        title: `Vysílač ${power}W`,
+        icon: txIcon
+    }).addTo(txLayer);
 
-  marker.bindPopup(`<b>Vysílač</b><br>${power} W`);
-  computeCoverage();
+    marker.bindPopup(`<b>Vysílač</b><br>${power} W`);
+
+    if (!skipCoverage) {  
+        computeCoverage();  // normálně ano
+    }
 }
 
 function addShop(latlng){
@@ -490,46 +493,52 @@ async function saveGame() {
 
 // Načtení hry z IndexedDB
 async function loadGame() {
-  if (!db) await initDB();
-  const tx = db.transaction(['txs', 'shops', 'meta'], 'readonly');
-  const txStore = tx.objectStore('txs');
-  const shopStore = tx.objectStore('shops');
-  const metaStore = tx.objectStore('meta');
+    if (!db) await initDB();
 
-  // Načíst meta data
-  const metaReq = metaStore.get('state');
-  metaReq.onsuccess = () => {
-    const meta = metaReq.result;
-    if (meta) {
-      money = meta.money || 200000;
-      customers = meta.customers || 1000;
-      updateHUD();
-    }
-  };
+    const tx = db.transaction(['txs', 'shops', 'meta'], 'readonly');
+    const txStore = tx.objectStore('txs');
+    const shopStore = tx.objectStore('shops');
+    const metaStore = tx.objectStore('meta');
 
-  // Načíst vysílače
-  txStore.openCursor().onsuccess = (e) => {
-    const cursor = e.target.result;
-    if (cursor) {
-      const { latlng, power } = cursor.value;
-      addTransmitter(latlng, power);
-      cursor.continue();
-    }
-  };
+    // Meta
+    const metaReq = metaStore.get('state');
+    metaReq.onsuccess = () => {
+        const meta = metaReq.result;
+        if (meta) {
+            money = meta.money || 200000;
+            customers = meta.customers || 1000;
+            updateHUD();
+        }
+    };
 
-  // Načíst pobočky
-  shopStore.openCursor().onsuccess = (e) => {
-    const cursor = e.target.result;
-    if (cursor) {
-      const { latlng } = cursor.value;
-      addShop(latlng);
-      cursor.continue();
-    }
-  };
+    // 🔥 Buffer pro rychlé načtení
+    const txBuffer = [];
+    const shopBuffer = [];
 
-  console.log('IndexedDB: hra načtena');
+    txStore.openCursor().onsuccess = e => {
+        const cursor = e.target.result;
+        if (cursor) {
+            txBuffer.push(cursor.value);
+            cursor.continue();
+        } else {
+            // po dočtení
+            txBuffer.forEach(t => addTransmitter(t.latlng, t.power, true));
+        }
+    };
+
+    shopStore.openCursor().onsuccess = e => {
+        const cursor = e.target.result;
+        if (cursor) {
+            shopBuffer.push(cursor.value);
+            cursor.continue();
+        } else {
+            shopBuffer.forEach(s => addShop(s.latlng));
+        }
+    };
+
+    // 🔥 Po malém delayi spočítáme coverage jednou pro celou Evropu
+    setTimeout(() => computeCoverage(), 200);
 }
-
 async function clearGame() {
   if (!db) await initDB();
   const tx = db.transaction(['txs', 'shops', 'meta'], 'readwrite');
